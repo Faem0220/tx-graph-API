@@ -5,38 +5,45 @@ import pandas as pd
 
 
 def graph_from_address(account, token):
+    ''' Return array of nodes and edges of and account and adjacents '''
     nodes, edges, adjacents = generate_graph(account, token)
-    file = open(f'graph-data{account}.json','w')
     for account in adjacents:
         time.sleep(5)
-        print('Account:',account)
+        print('Fetching account: ',account)
         node,edge,adj = generate_graph(account, token)
         nodes.extend(node)
         edges.extend(edge)
-
     # Remove duplicated nodes and edges
-    nodes = list({ each["data"]['address'] : each for each in nodes }.values())
-    edges = list({ each["data"]['id'] : each for each in edges }.values())
-
+    nodes = list({ node["data"]['address'] : node for node in nodes }.values())
+    edges = list({ edge["data"]['id'] : edge for edge in edges }.values())
     nodes.extend(edges)
-    # Save to file
-    json.dump(nodes,file)
-    file.close()
     return nodes
+
+def token_to_api_endpoint(account, token):
+    tokens = dict(
+        usdc = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+        usdt = '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+        dai = '0x6B175474E89094C44Da98b954EedeAC495271d0F',
+        busd = '0x4Fabb145d64652a948d72533023f6E7A623C7C53'
+    )
+    return f"https://api.etherscan.io/api?module=account&action=tokentx&contractaddress={tokens[token]}&address={account}&page=1&offset=100&startblock=0&endblock=99999999&sort=asc&apikey=YourApiKeyToken"
 
 
 def generate_graph(account,token='eth'):
     '''Generate lists of node and edge for a graph from account'''
-    api_endpoint = f""" https://api.etherscan.io/api?module=account&action=txlist&address={account}&startblock=0&endblock=99999999&page=1&offset=10&sort=desc&apikey=YourApiKeyToken"""
-    if token == 'usdc':
-        api_endpoint = f'https://api.etherscan.io/api?module=account&action=tokentx&contractaddress=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48&address={account}&page=1&offset=100&startblock=0&endblock=99999999&sort=asc&apikey=YourApiKeyToken'
+
+    if token == 'eth':
+        api_endpoint = f"https://api.etherscan.io/api?module=account&action=txlist&address={account}&startblock=0&endblock=99999999&page=1&offset=10&sort=desc&apikey=YourApiKeyToken"
+    else:
+        api_endpoint = token_to_api_endpoint(account, token)
+    
     response = requests.get(api_endpoint)
     # List of transactions to dataframe
     txs = response.json()['result']
     txs = pd.DataFrame(txs)
     # Format wei to eth
     token_decimal = 18
-    if token == 'usdc':
+    if token == 'usdc' or token == 'usdt':
         token_decimal = 6 
     txs['value'] = round(txs['value'].astype(float)* 10**-token_decimal,4) 
 
@@ -51,7 +58,7 @@ def generate_graph(account,token='eth'):
     # Sum of eth value for each parent account
     total_parents = parents.groupby(['from']).sum().reset_index()
     
-    # Format to cytoscape graph
+    # Format to cytoscapejs
     nodes = [
         {
             'data': {'id': account[:7], 'address': account }
@@ -60,7 +67,7 @@ def generate_graph(account,token='eth'):
     edges = []
     adjacents = []
     for index,children in total_children.iterrows():
-        if(children['value']!= 0) and children['to'] != "":
+        if children['value']!= 0 and children['to'] != "":
             node = {
                 'data': {
                     'id': children['to'][:7],
@@ -78,8 +85,9 @@ def generate_graph(account,token='eth'):
                 }
             }
             edges.append(edge)
+    
     for index,parent in total_parents.iterrows():
-        if(parent['value']!= 0 and parent['from'] != ""):
+        if parent['value']!= 0 and parent['from'] != "":
             node = {
                 'data': {
                     'id': parent['from'][:7],
