@@ -5,8 +5,6 @@ import pandas as pd
 
 
 def graph_from_address(account, token):
-# account = str(input('Enter root address: '))
-# token = str(input('eth or usdc: '))
     nodes, edges, adjacents = generate_graph(account, token)
     file = open(f'graph-data{account}.json','w')
     for account in adjacents:

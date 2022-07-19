@@ -18,5 +18,8 @@ app.add_middleware(
 
 @app.get("/{account}/{token}")
 async def root(account: str, token: str):
-    graph_json = txs_graph.graph_from_address(account,token) 
+    try:
+        graph_json = txs_graph.graph_from_address(account,token)
+    except:
+        graph_json = [] 
     return graph_json
